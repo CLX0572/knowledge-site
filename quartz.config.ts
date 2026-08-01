@@ -13,12 +13,12 @@ const config: QuartzConfig = {
     enableSPA: true,
     enablePopovers: true,
     locale: "zh-CN",
-    baseUrl: "https://knowledgesite.vercel.app",
+    baseUrl: process.env.SITE_BASE_URL || "https://knowledgesite.vercel.app",
     ignorePatterns: ["private", "templates", ".obsidian"],
     defaultDateType: "modified",
     theme: {
-      fontOrigin: "googleFonts",
-      cdnCaching: true,
+      fontOrigin: "system",
+      cdnCaching: false,
       typography: {
         header: "Schibsted Grotesk",
         body: "Source Sans Pro",
