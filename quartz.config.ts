@@ -13,7 +13,7 @@ const config: QuartzConfig = {
     enableSPA: true,
     enablePopovers: true,
     locale: "zh-CN",
-    baseUrl: "http://localhost:8080",
+    baseUrl: "https://knowledgesite.vercel.app",
     ignorePatterns: ["private", "templates", ".obsidian"],
     defaultDateType: "modified",
     theme: {
