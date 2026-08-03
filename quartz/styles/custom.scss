@@ -6,13 +6,29 @@
 }
 
 body {
-  font-family: "Source Sans Pro", "PingFang SC", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
+  font-family:
+    "Source Sans Pro",
+    "PingFang SC",
+    "Microsoft YaHei",
+    system-ui,
+    -apple-system,
+    sans-serif;
   line-height: 1.85;
   letter-spacing: 0.2px;
 }
 
-h1, h2, h3, h4, h5 {
-  font-family: "Schibsted Grotesk", "PingFang SC", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
+h1,
+h2,
+h3,
+h4,
+h5 {
+  font-family:
+    "Schibsted Grotesk",
+    "PingFang SC",
+    "Microsoft YaHei",
+    system-ui,
+    -apple-system,
+    sans-serif;
   font-weight: 700;
   letter-spacing: 0.3px;
 }
@@ -40,13 +56,23 @@ h3 {
   color: var(--darkgray);
 }
 
+h4 {
+  font-size: 1.02rem;
+  margin-top: 1.2rem;
+  margin-bottom: 0.4rem;
+  color: var(--secondary);
+  font-weight: 600;
+}
+
 p {
   margin: 0.75rem 0;
 }
 
 a {
   text-decoration: none;
-  transition: color 0.15s ease, background 0.15s ease;
+  transition:
+    color 0.15s ease,
+    background 0.15s ease;
 }
 
 a:hover {
@@ -61,22 +87,6 @@ article ol {
 
 article li {
   margin: 0.35rem 0;
-}
-
-.page-list {
-  margin-top: 1rem;
-  margin-bottom: 1.2rem;
-  padding: 1rem 1.25rem;
-  background: var(--lightgray);
-  border-radius: 10px;
-  border: 1px solid var(--highlight);
-}
-
-.page-list h3 {
-  border-left: none;
-  padding-left: 0;
-  color: var(--secondary);
-  margin-top: 0.25rem;
 }
 
 blockquote {
@@ -97,4 +107,137 @@ blockquote {
   border-top: 1px solid var(--highlight);
   padding-top: 1.5rem;
   margin-top: 3rem;
+}
+
+/* ====== 首页 10 大板块紫色卡片 grid ====== */
+table.board-grid {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 1rem 1rem;
+  margin: 1.5rem 0 2rem;
+}
+
+table.board-grid td.board-card {
+  display: table-cell;
+  vertical-align: top;
+  width: 50%;
+  padding: 1.1rem 1.25rem;
+  background: var(--lightgray);
+  border: 1px solid var(--highlight);
+  border-radius: 14px;
+  transition:
+    transform 0.15s ease,
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+  box-shadow: 0 2px 6px rgba(124, 58, 237, 0.06);
+}
+
+table.board-grid td.board-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--secondary);
+  box-shadow: 0 6px 16px rgba(124, 58, 237, 0.15);
+}
+
+table.board-grid td.board-card h3 {
+  margin-top: 0.1rem;
+  margin-bottom: 0.3rem;
+  padding-left: 0;
+  border-left: none;
+  color: var(--secondary);
+  font-size: 1.15rem;
+}
+
+table.board-grid td.board-card ul {
+  margin: 0.4rem 0 0;
+  padding-left: 1.15rem;
+  font-size: 0.94rem;
+}
+
+table.board-grid td.board-card > blockquote {
+  margin: 0.3rem 0 0.6rem;
+  padding: 0.3rem 0.7rem;
+  font-size: 0.88rem;
+  background: transparent;
+  border-left: 3px solid var(--tertiary);
+  color: var(--darkgray);
+}
+
+/* 窄屏卡片改成一列 */
+@media (max-width: 760px) {
+  table.board-grid,
+  table.board-grid tbody,
+  table.board-grid tr,
+  table.board-grid td.board-card {
+    display: block;
+    width: 100% !important;
+  }
+  table.board-grid {
+    border-spacing: 0 1rem;
+  }
+}
+
+/* ====== 知识点 / 题库 双板块 视觉区分 ====== */
+
+/* 给知识点板块标题加浅背景（蓝紫） */
+article > h2:has(+ h3 + section.knowledge),
+article > h2:nth-of-type(1) {
+  /* 知识点板块（第一个 h2）用左紫条 + 浅高亮 */
+}
+
+/* 给题库板块标题换色（偏青绿紫，视觉上区分开） */
+article > h2:nth-of-type(2) {
+  border-left-color: var(--tertiary);
+}
+
+/* 每道例题的解法块：通用/进阶/理解 三层卡片化 */
+article :is(h4, h5):has(+ ul, + ol) {
+  margin-top: 1rem;
+}
+
+/* 通用解法、进阶解法、理解与迁移的色块 */
+article p:has(+ ul),
+article li strong {
+  color: var(--dark);
+}
+
+/* 给"通用/进阶/理解"三级加徽章样式：利用 emoji 前缀 + 背景块 */
+article ul li::marker,
+article ol li::marker {
+  color: var(--secondary);
+  font-weight: 600;
+}
+
+/* 题解块（三级解法）外边距和阴影 */
+article > * + h4 {
+  margin-top: 1.4rem;
+}
+
+/* 实验专题题块（题型五）高亮，用浅黄色（不影响白紫主题，只是微微强调实验的重要性） */
+article h3:has(a[href*="题型五"]),
+article section:has(h3 a[href*="题型五"]),
+article > h3:nth-of-type(5) {
+  padding: 0.55rem 0.85rem;
+  background: var(--highlight);
+  border-radius: 8px;
+  border-left: 4px solid var(--tertiary);
+  margin-top: 1.6rem;
+}
+
+/* 每个章节底部的导航块（上一章/下一章/首页/板块） */
+article nav,
+article .chapter-nav {
+  margin-top: 2.4rem;
+  padding: 1rem 1.25rem;
+  background: var(--lightgray);
+  border: 1px solid var(--highlight);
+  border-radius: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem 1rem;
+  font-size: 0.96rem;
+}
+
+/* 公式块增加点上下呼吸空间 */
+.katex-display {
+  margin: 1.2rem 0 !important;
 }

@@ -1,4 +1,4 @@
-import { QuartzConfig } from "./quartz/cfg"
+﻿import { QuartzConfig } from "./quartz/cfg"
 import * as Plugin from "./quartz/plugins"
 
 /**
@@ -13,11 +13,11 @@ const config: QuartzConfig = {
     enableSPA: true,
     enablePopovers: true,
     locale: "zh-CN",
-    baseUrl: process.env.SITE_BASE_URL || "https://knowledgesite.vercel.app",
-    ignorePatterns: ["private", "templates", ".obsidian"],
+    baseUrl: process.env.SITE_BASE_URL || "knowledgesite.vercel.app",
+    ignorePatterns: ["private", "templates", ".obsidian", "物理讲义"],
     defaultDateType: "modified",
     theme: {
-      fontOrigin: "system",
+      fontOrigin: "local",
       cdnCaching: false,
       typography: {
         header: "Schibsted Grotesk",
@@ -38,17 +38,20 @@ const config: QuartzConfig = {
         },
         darkMode: {
           light: "#141022",
-          lightgray: "#241b3a",
-          gray: "#4b3e72",
-          darkgray: "#c4b5e0",
-          dark: "#ece7fa",
+          lightgray: "#1f1830",
+          gray: "#534469",
+          darkgray: "#a297be",
+          dark: "#eaddff",
           secondary: "#a78bfa",
           tertiary: "#7c3aed",
-          highlight: "rgba(167, 139, 250, 0.15)",
-          textHighlight: "rgba(124, 58, 237, 0.45)",
+          highlight: "rgba(167, 139, 250, 0.18)",
+          textHighlight: "rgba(124, 58, 237, 0.3)",
         },
       },
     },
+    generatedFontFiles: ["contentIndex", "static"],
+    assets: "quartz/static",
+    globalState: {},
   },
   plugins: {
     transformers: [
@@ -66,9 +69,13 @@ const config: QuartzConfig = {
       Plugin.ObsidianFlavoredMarkdown({ enableInHtmlEmbed: false }),
       Plugin.GitHubFlavoredMarkdown(),
       Plugin.TableOfContents(),
-      Plugin.CrawlLinks({ markdownLinkResolution: "shortest" }),
+      Plugin.CrawlLinks({
+        markdownLinkResolution: "shortest",
+        openLinksInNewTab: true,
+        prettyRefs: true,
+      }),
       Plugin.Description(),
-      Plugin.Latex({ renderEngine: "katex" }),
+      Plugin.Latex({ renderEngine: "katex", renderLegacy: false }),
     ],
     filters: [Plugin.RemoveDrafts()],
     emitters: [
@@ -83,10 +90,10 @@ const config: QuartzConfig = {
       }),
       Plugin.Assets(),
       Plugin.Static(),
-      Plugin.Favicon(),
       Plugin.NotFoundPage(),
-      // Comment out CustomOgImages to speed up build time
-      Plugin.CustomOgImages(),
+      Plugin.CNAME({
+        domain: process.env.CNAME_DOMAIN || "",
+      }),
     ],
   },
 }
