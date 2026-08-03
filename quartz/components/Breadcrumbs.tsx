@@ -78,12 +78,50 @@ export default ((opts?: Partial<BreadcrumbOptions>) => {
 
     return (
       <nav class={classNames(displayClass, "breadcrumb-container")} aria-label="breadcrumbs">
-        {crumbs.map((crumb, index) => (
-          <div class="breadcrumb-element">
-            <a href={crumb.path}>{crumb.displayName}</a>
-            {index !== crumbs.length - 1 && <p>{` ${options.spacerSymbol} `}</p>}
-          </div>
-        ))}
+        {crumbs.map((crumb, index) => {
+          const isLast = index === crumbs.length - 1
+          const isFolder = !isLast && !!crumb.path && (crumb.path.endsWith("/") || !crumb.path.includes("."))
+          return (
+            <div class="breadcrumb-element">
+              {isFolder ? (
+                // FIX: intermediate folder crumb -> <span> NOT <a href>. Click expands matching folder in the left Explorer.
+                <span
+                  class="breadcrumb-folder-crumb"
+                  data-folder-slug={crumb.path}
+                  role="button"
+                  tabIndex={0}
+                  onClick={(evt) => {
+                    evt.preventDefault()
+                    // Expand / scroll-to matching folder in Explorer
+                    const titleText = crumb.displayName.trim()
+                    const folderTitles = document.querySelectorAll<HTMLElement>(".folder-title")
+                    let matched: HTMLElement | null = null
+                    for (const t of Array.from(folderTitles)) {
+                      if ((t.textContent || "").trim() === titleText) {
+                        matched = t
+                        break
+                      }
+                    }
+                    if (matched) {
+                      const fc = matched.closest(".folder-container") as HTMLElement | null
+                      const child = fc?.nextElementSibling as HTMLElement | null
+                      if (child && !child.classList.contains("open")) {
+                        const icon = fc?.querySelector(".folder-icon") as HTMLElement | null
+                        icon?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }))
+                      }
+                      matched.scrollIntoView({ behavior: "smooth", block: "center" })
+                    }
+                  }}
+                >
+                  {crumb.displayName}
+                </span>
+              ) : (
+                <a href={crumb.path}>{crumb.displayName}</a>
+              )}
+              {!isLast && <p>{` ${options.spacerSymbol} `}</p>}
+            </div>
+          )
+        })}
       </nav>
     )
   }

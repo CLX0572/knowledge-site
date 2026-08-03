@@ -124,6 +124,17 @@ function createFolderNode(
     a.className = "folder-title"
     a.textContent = node.displayName
     button.replaceWith(a)
+      // SAFETY NET: even in link mode, never navigate from folder-title <a> (expand instead) - belt+suspenders
+      a.addEventListener("click", function (evt: Event) {
+        evt.preventDefault(); evt.stopPropagation();
+        // try expand nearest folder (icon sibling handler path)
+        const parentContainer = a.closest(".folder-container") as HTMLElement | null;
+        if (parentContainer) {
+          const icon = parentContainer.querySelector(".folder-icon") as HTMLElement | null;
+          if (icon) (icon as HTMLElement).dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+        }
+      })
+      a.setAttribute("href", "#")  // belt: overwrite folder href completely
   } else {
     const span = titleContainer.querySelector(".folder-title") as HTMLElement
     span.textContent = node.displayName
@@ -315,3 +326,46 @@ window.addEventListener("resize", function () {
 function setFolderState(folderElement: HTMLElement, collapsed: boolean) {
   return collapsed ? folderElement.classList.remove("open") : folderElement.classList.add("open")
 }
+
+// ============================================================
+// GLOBAL CAPTURE BELT (afterDOMLoaded): any click that would navigate to a folder URL whose folder exists in Explorer -> BLOCK navigation, expand instead
+// ============================================================
+document.addEventListener(
+  "click",
+  (evt: Event) => {
+    const target = evt.target as HTMLElement | null
+    if (!target) return
+    const anchor = target.closest("a") as HTMLAnchorElement | null
+    if (!anchor) return
+    const href = (anchor.getAttribute("href") || "").trim()
+    // Skip non-folder looking href, in-page (#), external (http), mailto, etc.
+    if (!href || href === "#" || href.startsWith("http") || href.startsWith("mailto:") || anchor.classList.contains("active")) return
+    const looksLikeFolder =
+      href.endsWith("/") ||
+      (!href.includes(".") && !href.startsWith("#") && !href.includes("?"))
+    if (!looksLikeFolder) return
+    // Match by Explorer folder-title text == anchor text
+    const aText = (anchor.textContent || "").trim()
+    if (!aText) return
+    const titles = document.querySelectorAll<HTMLElement>(".folder-title")
+    let matchedFolderTitle: HTMLElement | null = null
+    for (const t of Array.from(titles)) {
+      if ((t.textContent || "").trim() === aText) {
+        matchedFolderTitle = t
+        break
+      }
+    }
+    if (!matchedFolderTitle) return
+    // It's a folder link with matching Explorer folder present -> block nav, expand that folder instead
+    evt.preventDefault()
+    evt.stopPropagation()
+    const fc = matchedFolderTitle.closest(".folder-container") as HTMLElement | null
+    const child = fc?.nextElementSibling as HTMLElement | null
+    if (child && !child.classList.contains("open")) {
+      const icon = fc?.querySelector(".folder-icon") as HTMLElement | null
+      icon?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }))
+    }
+    matchedFolderTitle.scrollIntoView({ behavior: "smooth", block: "center" })
+  },
+  true, // capture phase: runs BEFORE any element handlers (including Quartz built-in click-to-nav if we missed one)
+)
