@@ -94,7 +94,7 @@ export default ((opts?: Partial<BreadcrumbOptions>) => {
                     evt.preventDefault()
                     // Expand / scroll-to matching folder in Explorer
                     const titleText = crumb.displayName.trim()
-                    const folderTitles = document.querySelectorAll<HTMLElement>(".folder-title")
+                    const folderTitles = document.querySelectorAll(".folder-title") as NodeListOf<HTMLElement>
                     let matched: HTMLElement | null = null
                     for (const t of Array.from(folderTitles)) {
                       if ((t.textContent || "").trim() === titleText) {

@@ -39,7 +39,7 @@ export const defaultContentPageLayout: PageLayout = {
       ],
     }),
     Component.Explorer({
-      folderClickBehavior: "collapse",        # FIX: folder title click = expand/collapse, NOT jump to folder page
+      folderClickBehavior: "collapse",    // FIX: folder title click = expand/collapse, NOT jump to folder page
       folderDefaultState: "collapsed",
       useSavedState: true,
       order: ["filter", "map", "sort"],
@@ -76,7 +76,7 @@ export const defaultListPageLayout: PageLayout = {
       ],
     }),
     Component.Explorer({
-      folderClickBehavior: "collapse",        # FIX: folder title click = expand/collapse, NOT jump to folder page
+      folderClickBehavior: "collapse",    // FIX: folder title click = expand/collapse, NOT jump to folder page
       folderDefaultState: "collapsed",
       useSavedState: true,
       order: ["filter", "map", "sort"],
