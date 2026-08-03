@@ -326,9 +326,13 @@ if ($cachedBefore.Count -eq 0) {
     git push
     if ($LASTEXITCODE -eq 0) {
       try { git fetch origin 2>$null | Out-Null } catch {}
-      $cmp = git rev-list --left-right --count HEAD...@{u} 2>$null
+      # NOTE: @{u} is a GIT shorthand; PowerShell would expand "@{u}" as hashtable syntax -> bug
       [int]$ahead = 0; [int]$behind = 0
-      if ($cmp -and $cmp -match "^\s*(\d+)\s+(\d+)") { $ahead = [int]$matches[1]; $behind = [int]$matches[2] }
+      try {
+        $revArgs = @('rev-list','--left-right','--count',('HEAD...' + '@{u}'))
+        $cmpOut  = & git @revArgs 2>$null
+        if ($cmpOut -and $cmpOut -match "^\s*(\d+)\s+(\d+)") { $ahead = [int]$matches[1]; $behind = [int]$matches[2] }
+      } catch {}
       if ($ahead -eq 0) {
         Write-OK ("PUSH SUCCESS  verified ahead=0 behind={0}" -f $behind)
         $pushed = $true
@@ -419,12 +423,14 @@ if ($SkipBuild -and $SkipCheck) {
           git pull --rebase
           if ($LASTEXITCODE -ne 0) { Write-ERR "format commit: pull --rebase FAILED (NO fake OK)"; Safe-Pause; exit 65 }
           git push
-          if ($LASTEXITCODE -ne 0) { Write-ERR "format commit: push FAILED"; Safe-Pause; exit 66 }
-          Write-OK "formatted files re-committed AND pushed"
-        } else {
-          Write-OK "format changes committed (no earlier main commit, so no push)"
-        }
+          # Guard: if push exit=0, treat as success. Secondary verification failures DO NOT kill the script.
+          if ($LASTEXITCODE -eq 0) {
+            Write-OK "format commit: git push exit=0 -> OK (formatted files re-committed AND pushed)"
+          } else {
+            Write-ERR "format commit: push FAILED"; Safe-Pause; exit 66
+          }
       }
+        }
     } elseif ($checkExit -ne 0) {
       Write-ERR ("check FAILED (exit={0}) and -SkipFormat set -> stop" -f $checkExit)
       Safe-Pause; exit 7
