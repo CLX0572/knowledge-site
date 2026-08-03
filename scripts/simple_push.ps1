@@ -1,16 +1,19 @@
 ﻿#Requires -Version 5.1
 # Simple GitHub push script (PS5 compatible - avoids finally/trap redirection bugs)
 # Hardcoded project root. Flow:
-#   cd root -> sync vault md -> status -> git add (ALL files by DEFAULT) ->
-#   commit -> pull --rebase -> push -> npm check (120s timeout) -> npm build (120s timeout) -> pause.
+#   cd root -> resolve system npm/node ABSOLUTE paths -> sync vault md -> status ->
+#   git add (ALL by DEFAULT) -> commit -> pull --rebase -> push ->
+#   npm verify (npm --version) -> check (120s timeout, ABS npm path) ->
+#   build (120s timeout, ABS npm path) -> pause.
 #
 # Usage:
 #   powershell -NoProfile -ExecutionPolicy Bypass -File scripts\simple_push.ps1
-#       -> auto commit msg, git add . (ALL files in repo - this is the DEFAULT)
+#       -> auto commit msg, git add . (ALL files - DEFAULT)
 #   powershell -NoProfile -ExecutionPolicy Bypass -File scripts\simple_push.ps1 -Msg "my message"
 #   powershell -NoProfile -ExecutionPolicy Bypass -File scripts\simple_push.ps1 -ContentOnly
-#       -> LEGACY mode: only git add content/ (not recommended, misses quartz.config.ts/bat/scripts)
-#   powershell -NoProfile -ExecutionPolicy Bypass -File scripts\simple_push.ps1 -SkipBuild -SkipCheck
+#       -> LEGACY: only git add content/ (misses root-level ts/scss/bat changes)
+#   powershell -NoProfile -ExecutionPolicy Bypass -File scripts\simple_push.ps1 -SkipCheck -SkipBuild
+#       -> SKIP local npm entirely (md still pushed; Vercel builds server-side)
 
 param(
   [Alias("Msg")]
@@ -19,8 +22,8 @@ param(
   [switch]$ContentOnly,   # legacy: restrict git add to content/ only. Default = add ALL files (.)
   [switch]$SkipBuild,
   [switch]$SkipCheck,
-  [switch]$SkipFormat,    # skip the "prettier auto-fix then recommit" step
-  [switch]$SkipVaultSync  # skip robocopy from Obsidian VAULT -> content/
+  [switch]$SkipFormat,    # skip "prettier auto-fix then recommit" step
+  [switch]$SkipVaultSync  # skip robocopy Obsidian VAULT -> content/
 )
 
 $ErrorActionPreference = "Stop"
@@ -31,6 +34,14 @@ $ErrorActionPreference = "Stop"
 [int]$MAX_PUSH_ATTEMPTS    = 3
 [int]$RETRY_WAIT_SECONDS   = 3
 [int]$NPM_TIMEOUT_SECONDS  = 120   # hard timeout for npm check / npm build (avoid hang)
+# Known system node/npm install roots (used as fallback when Get-Command fails)
+[string[]]$KNOWN_NODE_DIRS = @(
+  "E:\Node",
+  "C:\Program Files\nodejs",
+  "C:\Program Files (x86)\nodejs",
+  "$env:LOCALAPPDATA\nodejs",
+  "$env:APPDATA\npm"
+)
 # ==================================
 
 function Write-H2([string]$t) { Write-Host ""; Write-Host ("==========  " + $t + "  ==========") -ForegroundColor Cyan }
@@ -41,7 +52,6 @@ function Write-WARN([string]$t){ Write-Host ("[WARN] " + $t) -ForegroundColor Ye
 function Safe-Pause() {
   Write-Host ""
   Write-Host "-----  DONE. Press ANY key to close window  -----" -ForegroundColor Yellow
-  # 4-level fallback. NEVER call cmd.exe (security rule blocks it on host).
   try   { $null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown") }
   catch {
     try   { $null = [Console]::ReadKey($true) }
@@ -83,16 +93,85 @@ function Stop-ProcessTree([int]$RootId) {
   Start-Sleep -Milliseconds 400
 }
 
+# -----------------------------------------------------------------------------
+# Resolve system node.exe / npm.cmd to ABSOLUTE paths and FIX environment vars
+# so that Process.Start(...) NEVER accidentally resolves "npm.cmd" inside the
+# project directory (which, on Node 24 + npm 11, triggers NODE_PATH pollution
+# that tries to load npm-cli.js from $project\node_modules and crashes).
+# -----------------------------------------------------------------------------
+function Resolve-ToolPaths() {
+  # --- 1) node.exe ---
+  [string]$script:NODE_EXE = ""
+  try {
+    $g = Get-Command node.exe -ErrorAction Stop
+    $script:NODE_EXE = $g.Source
+  } catch {}
+  if ([string]::IsNullOrWhiteSpace($script:NODE_EXE)) {
+    foreach ($dir in $KNOWN_NODE_DIRS) {
+      $candidate = Join-Path $dir "node.exe"
+      if (Test-Path -LiteralPath $candidate) { $script:NODE_EXE = $candidate; break }
+    }
+  }
+  # --- 2) npm.cmd ---
+  [string]$script:NPM_CMD = ""
+  try {
+    $g = Get-Command npm.cmd -ErrorAction Stop
+    $script:NPM_CMD = $g.Source
+  } catch {}
+  if ([string]::IsNullOrWhiteSpace($script:NPM_CMD)) {
+    try {
+      $g = Get-Command npm -ErrorAction Stop
+      if ($g.Source -like "*.cmd") { $script:NPM_CMD = $g.Source }
+    } catch {}
+  }
+  if ([string]::IsNullOrWhiteSpace($script:NPM_CMD)) {
+    foreach ($dir in $KNOWN_NODE_DIRS) {
+      $candidate = Join-Path $dir "npm.cmd"
+      if (Test-Path -LiteralPath $candidate) { $script:NPM_CMD = $candidate; break }
+    }
+  }
+  # --- 3) Fix process PATH / NODE_PATH ---
+  if (-not [string]::IsNullOrWhiteSpace($script:NODE_EXE)) {
+    $nodeDir = Split-Path -Parent $script:NODE_EXE
+    # Promote node install dir to the BEGINNING of PATH (highest resolution priority)
+    $curPath = $env:PATH
+    if ($curPath) {
+      $parts = $curPath -split ';' | Where-Object { $_ -and ($_ -ne $nodeDir) }
+      $env:PATH = (@($nodeDir) + $parts) -join ';'
+    } else {
+      $env:PATH = $nodeDir
+    }
+  }
+  # Remove any pernicious NODE_PATH that might cause npm to resolve into project node_modules
+  if ($env:NODE_PATH) { Remove-Item Env:NODE_PATH -ErrorAction SilentlyContinue }
+  # Remove npm-specific env overrides that might point to project-local paths
+  foreach ($k in @("NPM_CONFIG_PREFIX","NPM_CONFIG_NODEDIR","NPM_BIN")) {
+    if (Test-Path "Env:$k") { Remove-Item ("Env:" + $k) -ErrorAction SilentlyContinue }
+  }
+  Write-Host ("  node.exe -> {0}" -f $(if ($script:NODE_EXE) { $script:NODE_EXE } else { "NOT FOUND" }))
+  Write-Host ("  npm.cmd  -> {0}" -f $(if ($script:NPM_CMD)  { $script:NPM_CMD  } else { "NOT FOUND" }))
+}
+
 # Timeout wrapper for long-running native commands (fixes "stuck on tsc for 30min" bug).
+# ALWAYS invoked with absolute system npm.exe path.
 # Returns: exit code (int); on timeout returns [int]::MaxValue
 function Run-WithTimeout {
   param(
-    [Parameter(Mandatory=$true)][string]$FileName,
+    [Parameter(Mandatory=$true)][string]$FileName,            # ABSOLUTE PATH (e.g. $NPM_CMD)
     [Parameter(Mandatory=$false)][string]$Arguments = "",
     [Parameter(Mandatory=$false)][string]$WorkingDirectory = $ROOT,
     [Parameter(Mandatory=$false)][int]$TimeoutSeconds = $NPM_TIMEOUT_SECONDS,
     [Parameter(Mandatory=$false)][string]$DisplayName = $FileName
   )
+  # Paranoia: if somehow caller passed a relative name, try to resolve
+  if (-not [System.IO.Path]::IsPathRooted($FileName)) {
+    try {
+      $g = Get-Command $FileName -ErrorAction Stop
+      $FileName = $g.Source
+    } catch {
+      # Leave as-is; Process.Start may still find it
+    }
+  }
   $psi = New-Object System.Diagnostics.ProcessStartInfo
   $psi.FileName               = $FileName
   $psi.Arguments              = $Arguments
@@ -100,6 +179,11 @@ function Run-WithTimeout {
   $psi.UseShellExecute        = $false
   $psi.RedirectStandardOutput = $false   # stream live to host console
   $psi.RedirectStandardError  = $false
+  # Force-clean process environment for npm/node (CRITICAL for Node 24 resolution bug):
+  if ($psi.EnvironmentVariables.ContainsKey("NODE_PATH")) { $psi.EnvironmentVariables.Remove("NODE_PATH") | Out-Null }
+  foreach ($k in @("NPM_CONFIG_PREFIX","NPM_CONFIG_NODEDIR","NPM_BIN")) {
+    if ($psi.EnvironmentVariables.ContainsKey($k)) { $psi.EnvironmentVariables.Remove($k) | Out-Null }
+  }
   $proc = [System.Diagnostics.Process]::Start($psi)
   try {
     if (-not $proc.WaitForExit($TimeoutSeconds * 1000)) {
@@ -115,7 +199,6 @@ function Run-WithTimeout {
 }
 
 # Obsidian VAULT -> website content/ mirror sync via robocopy.
-# Syncs *.md + image attachments, excludes .obsidian / .git / _site etc.
 function Sync-VaultToContent() {
   if ([string]::IsNullOrWhiteSpace($VAULT) -or -not (Test-Path -LiteralPath $VAULT)) {
     Write-WARN ("Obsidian VAULT not found: " + $VAULT + "  -> skip md sync")
@@ -134,7 +217,7 @@ function Sync-VaultToContent() {
   }
   Write-Host "  robocopy Obsidian VAULT -> site content/  (md + attachments)"
   $null = & robocopy @robArgs
-  # robocopy exit codes 0..7 = success (0=no-op, 1=files copied, ...) ; >=8 = error
+  # robocopy exit 0..7 = OK; >=8 = real error
   if ($LASTEXITCODE -ge 8) {
     Write-WARN ("robocopy reported warning (exit={0}); continuing anyway..." -f $LASTEXITCODE)
   } else {
@@ -142,6 +225,9 @@ function Sync-VaultToContent() {
   }
 }
 
+# ===========================================================
+#  MAIN
+# ===========================================================
 Write-Host ""
 Write-Host "===  Physics KB GitHub Push (Simple Mode)  ===" -ForegroundColor Magenta
 Write-Host ("Project: " + $ROOT)
@@ -150,10 +236,14 @@ Write-Host ("Project: " + $ROOT)
 Write-H2 "Step 0: Locate project root"
 if (-not (Test-Path -LiteralPath $ROOT)) { Write-ERR ("ROOT missing: " + $ROOT); Safe-Pause; exit 2 }
 try { Set-Location -LiteralPath $ROOT -ErrorAction Stop } catch { Write-ERR ("cd failed: " + $_.Exception.Message); Safe-Pause; exit 2 }
-if (-not (Test-Path -LiteralPath (Join-Path $ROOT ".git"))) { Write-ERR "No .git folder. Run git init + git remote add origin ... first."; Safe-Pause; exit 2 }
+if (-not (Test-Path -LiteralPath (Join-Path $ROOT ".git"))) { Write-ERR "No .git folder. Run 'git init' + 'git remote add origin ...' first."; Safe-Pause; exit 2 }
 Write-OK ("cd -> " + $ROOT)
 
-# ---------- Step 0.5: FIRST sync vault md -> content/  (so Step 1 git status reflects md changes) ----------
+# ---------- Step 0.25: Resolve system node/npm FIRST (fixes MODULE_NOT_FOUND in project dir) ----------
+Write-H2 "Step 0.25: Resolve system node/npm (ABSOLUTE paths + PATH fix)"
+Resolve-ToolPaths
+
+# ---------- Step 0.5: FIRST sync vault md -> content/ ----------
 if ($SkipVaultSync) {
   Write-WARN "Vault sync skipped (-SkipVaultSync set)"
 } else {
@@ -170,15 +260,17 @@ $statLines = @(git status --porcelain)
 Write-Host ("  Modified : " + $mod)
 Write-Host ("  New      : " + $new)
 Write-Host ("  Deleted  : " + $del)
-if ($statLines.Count -eq 0) {
+[bool]$noGitChanges = ($statLines.Count -eq 0)
+if ($noGitChanges) {
   Write-WARN "No git changes. Nothing to commit/push."
-  Write-Host "  (If changes were expected: check files were saved / VAULT files are newer than content/)"
+  Write-Host "  (Common cause: Obsidian Vault md == site content/ md byte-for-byte after sync -> nothing changed.)"
+  Write-Host "  (If changes expected: save md files in Obsidian, or manually touch a file then re-run.)"
 }
 
-# ---------- Step 2: git add (DEFAULT = ALL files. Fixes "quartz.config.ts/bat/scripts never pushed" bug) ----------
+# ---------- Step 2: git add (DEFAULT = ALL files) ----------
 Write-H2 "Step 2: git add"
 if ($ContentOnly) {
-  Write-Host "  git add content/  (LEGACY MODE, per -ContentOnly - misses root-level ts/scss/bat changes)"
+  Write-Host "  git add content/  (LEGACY MODE, per -ContentOnly - misses root ts/scss/bat)"
   if (Test-Path -LiteralPath (Join-Path $ROOT "content")) {
     git add content/
   } else {
@@ -191,7 +283,7 @@ if ($ContentOnly) {
 }
 Write-OK "staged"
 
-# ---------- Step 3: git commit (skip if nothing staged) ----------
+# ---------- Step 3: git commit ----------
 Write-H2 "Step 3: git commit"
 $cachedBefore = @(git diff --cached --name-only)
 [bool]$didMainCommit = $false
@@ -205,7 +297,7 @@ if ($cachedBefore.Count -eq 0) {
   Write-Host ("  message: " + $CommitMessage)
   git commit -m $CommitMessage
   if ($LASTEXITCODE -ne 0) {
-    Write-ERR ("git commit failed (exit={0}). Fix errors above then re-run." -f $LASTEXITCODE)
+    Write-ERR ("git commit failed (exit={0}). Fix errors above, then re-run." -f $LASTEXITCODE)
     Safe-Pause; exit 3
   }
   $didMainCommit = $true
@@ -233,7 +325,6 @@ if ($cachedBefore.Count -eq 0) {
     Write-Host ("  attempt " + $attempt + "/" + $MAX_PUSH_ATTEMPTS + " ...")
     git push
     if ($LASTEXITCODE -eq 0) {
-      # verify: after fetch, ahead must be 0
       try { git fetch origin 2>$null | Out-Null } catch {}
       $cmp = git rev-list --left-right --count HEAD...@{u} 2>$null
       [int]$ahead = 0; [int]$behind = 0
@@ -267,30 +358,54 @@ if ($SkipBuild -and $SkipCheck) {
 } elseif (-not (Test-Path -LiteralPath (Join-Path $ROOT "package.json"))) {
   Write-WARN "package.json missing -> skip npm step"
 } else {
+  # --- PRE-FLIGHT: verify that the system npm actually works BEFORE entering check/format chain ---
+  # (This avoids today's confusing "check failed -> auto format -> format also crashes" chain of red herrings.)
+  Write-H2 "Step 6.0: Pre-flight npm health (ABS path)"
+  if ([string]::IsNullOrWhiteSpace($script:NPM_CMD) -or -not (Test-Path -LiteralPath $script:NPM_CMD)) {
+    Write-ERR ("npm.cmd not resolvable (NPM_CMD = {0}). Install Node.js LTS (20/22) + npm, or rerun with -SkipCheck -SkipBuild." -f $script:NPM_CMD)
+    Safe-Pause; exit 50
+  }
+  Write-Host ("  npm.cmd (ABS): {0}" -f $script:NPM_CMD)
+  $npmvExit = Run-WithTimeout -FileName $script:NPM_CMD -Arguments "--version" -DisplayName "npm --version (pre-flight)"
+  if ($npmvExit -ne 0) {
+    Write-ERR ("npm health check FAILED (exit={0}). Node 24.15.0 often causes MODULE_NOT_FOUND in project dirs." -f $npmvExit)
+    Write-Host "  Manual fixes (choose ANY ONE, then re-run):"
+    Write-Host "    1) [QUICKEST] Re-run with -SkipCheck -SkipBuild -> skip local npm. MD files still pushed, Vercel will build on server."
+    Write-Host "    2) [RECOMMENDED] Uninstall Node 24.15.0, install Node.js LTS 20.x or 22.x (from nodejs.org) -> npm 10.x instead of 11."
+    Write-Host "    3) [TRY] Delete project node_modules, then run: cd ROOT ; npm install --omit=optional"
+    Safe-Pause; exit 51
+  }
+  Write-OK ("npm OK (version subprocess exit=0)")
+
+  # auto-install node_modules if absent
   if (-not (Test-Path -LiteralPath (Join-Path $ROOT "node_modules"))) {
     Write-Host "  node_modules absent -> npm install --omit=optional (first run only)"
-    npm install --omit=optional
+    $instExit = Run-WithTimeout -FileName $script:NPM_CMD -Arguments "install --omit=optional" -DisplayName "npm install" -TimeoutSeconds 900
+    if ($instExit -ne 0) {
+      Write-ERR ("npm install FAILED (exit={0})." -f $instExit)
+      Write-Host "  Quick bypass: rerun with -SkipCheck -SkipBuild. Vercel builds server-side."
+      Safe-Pause; exit 52
+    }
   }
 
   if (-not $SkipCheck) {
     Write-Host "  -> npm run check (tsc + prettier --check)"
-    $checkExit = Run-WithTimeout -FileName "npm.cmd" -Arguments "run check" -DisplayName "npm run check"
-    if ($checkExit -eq [int]::MaxValue) { Write-ERR "npm run check TIMED OUT (tsc hang? tune NPM_TIMEOUT_SECONDS)"; Safe-Pause; exit 60 }
+    $checkExit = Run-WithTimeout -FileName $script:NPM_CMD -Arguments "run check" -DisplayName "npm run check"
+    if ($checkExit -eq [int]::MaxValue) { Write-ERR "npm run check TIMED OUT (tsc hang? increase NPM_TIMEOUT_SECONDS)"; Safe-Pause; exit 60 }
     if ($checkExit -ne 0 -and -not $SkipFormat) {
       Write-WARN ("check failed (exit={0}) -> auto npm run format, then RE-RUN check to verify fix" -f $checkExit)
-      $fmtExit = Run-WithTimeout -FileName "npm.cmd" -Arguments "run format" -DisplayName "npm run format"
+      $fmtExit = Run-WithTimeout -FileName $script:NPM_CMD -Arguments "run format" -DisplayName "npm run format"
       if ($fmtExit -eq [int]::MaxValue) { Write-ERR "npm run format TIMED OUT"; Safe-Pause; exit 61 }
       if ($fmtExit -ne 0) {
         Write-ERR ("format command itself FAILED (exit={0}). TSC/config errors CANNOT be fixed by prettier. Fix manually first." -f $fmtExit)
         Safe-Pause; exit 6
       }
       Write-Host "  -> re-run npm run check (post-format, CONFIRM pass or STOP)"
-      $checkExit2 = Run-WithTimeout -FileName "npm.cmd" -Arguments "run check" -DisplayName "npm run check (post-format)"
+      $checkExit2 = Run-WithTimeout -FileName $script:NPM_CMD -Arguments "run check" -DisplayName "npm run check (post-format)"
       if ($checkExit2 -eq [int]::MaxValue) { Write-ERR "npm run check (post-format) TIMED OUT"; Safe-Pause; exit 62 }
       if ($checkExit2 -ne 0) {
-        # BUG FIX from past runs: format then pull/push printed OK even when tsc still failing. Now we HALT here.
         Write-ERR ("npm run check STILL FAILING after format (exit={0}). This is a TSC/types error NOT prettier." -f $checkExit2)
-        Write-Host "  -> scroll up, fix the TS error (example: quartz.config.ts fontOrigin=system -> local), then re-run."
+        Write-Host "  -> scroll up, fix the TS error (example generatedFontFiles / prettyRefs / renderLegacy / CNAME args remove), then re-run."
         Safe-Pause; exit 63
       }
       Write-OK "check passes post-format"
@@ -320,10 +435,11 @@ if ($SkipBuild -and $SkipCheck) {
 
   if (-not $SkipBuild) {
     Write-Host "  -> npm run build (Quartz static site -> public/)"
-    $buildExit = Run-WithTimeout -FileName "npm.cmd" -Arguments "run build" -DisplayName "npm run build"
+    $buildExit = Run-WithTimeout -FileName $script:NPM_CMD -Arguments "run build" -DisplayName "npm run build"
     if ($buildExit -eq [int]::MaxValue) { Write-ERR "npm run build TIMED OUT"; Safe-Pause; exit 80 }
     if ($buildExit -ne 0) {
       Write-ERR ("npm run build FAILED (exit={0}). Scroll up for the error." -f $buildExit)
+      Write-Host "  Quick bypass: rerun with -SkipBuild. Vercel builds server-side after git push."
       Write-Host "  Common fix: delete node_modules folder then re-run (triggers fresh npm install)"
       Safe-Pause; exit 8
     }
@@ -344,6 +460,10 @@ Write-Host ("  Branch    : " + $sumBranch)
 Write-Host ("  Commit    : " + $sumCommit)
 Write-Host "  Live URL  : https://knowledgesite.vercel.app"
 Write-Host "  (Vercel auto-deploys 1-2 min after git push to main -> check https://vercel.com/dashboard for progress)"
+if ($noGitChanges) {
+  Write-WARN "Note: This run had 0 git changes (Vault md == content/ md). The above commit is the PREVIOUS commit already on GitHub."
+  Write-Host "  Quick tip to trigger re-deploy with 0 md changes: touch & save any md file (add a blank line at end) -> re-run bat."
+}
 Write-OK "ALL DONE."
 Safe-Pause
 exit 0
