@@ -250,6 +250,18 @@ async function setupExplorer(currentSlug: FullSlug) {
         button.addEventListener("click", toggleFolder)
         window.addCleanup(() => button.removeEventListener("click", toggleFolder))
       }
+      // SAFETY NET: also make .folder-title text itself expand/collapse (never navigate, even if <a href>)
+      const folderTitles = explorer.getElementsByClassName(
+        "folder-title",
+      ) as HTMLCollectionOf<HTMLElement>
+      for (const titleEl of folderTitles) {
+        titleEl.addEventListener("click", function (evt: Event) {
+          evt.preventDefault()
+          evt.stopPropagation()
+          toggleFolder(evt as MouseEvent)
+        })
+        window.addCleanup(() => (titleEl as HTMLElement).removeEventListener("click", (titleEl as any)._ftHandler))
+      }
     }
 
     const folderIcons = explorer.getElementsByClassName(

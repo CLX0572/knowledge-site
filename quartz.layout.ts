@@ -38,7 +38,20 @@ export const defaultContentPageLayout: PageLayout = {
         { Component: Component.ReaderMode() },
       ],
     }),
-    Component.Explorer(),
+    Component.Explorer({
+      folderClickBehavior: "collapse",        # FIX: folder title click = expand/collapse, NOT jump to folder page
+      folderDefaultState: "collapsed",
+      useSavedState: true,
+      order: ["filter", "map", "sort"],
+      filterFn: (node) => node,
+      mapFn: (node) => { return node },
+      sortFn: (a, b) => {
+        if ((!a.isFolder && !b.isFolder) || (a.isFolder && b.isFolder)) {
+          return a.displayName.localeCompare(b.displayName, undefined, { numeric: true, sensitivity: "base" })
+        }
+        return a.isFolder ? -1 : 1
+      },
+    }),
   ],
   right: [
     Component.Graph(),
@@ -62,7 +75,20 @@ export const defaultListPageLayout: PageLayout = {
         { Component: Component.Darkmode() },
       ],
     }),
-    Component.Explorer(),
+    Component.Explorer({
+      folderClickBehavior: "collapse",        # FIX: folder title click = expand/collapse, NOT jump to folder page
+      folderDefaultState: "collapsed",
+      useSavedState: true,
+      order: ["filter", "map", "sort"],
+      filterFn: (node) => node,
+      mapFn: (node) => { return node },
+      sortFn: (a, b) => {
+        if ((!a.isFolder && !b.isFolder) || (a.isFolder && b.isFolder)) {
+          return a.displayName.localeCompare(b.displayName, undefined, { numeric: true, sensitivity: "base" })
+        }
+        return a.isFolder ? -1 : 1
+      },
+    }),
   ],
   right: [],
 }
