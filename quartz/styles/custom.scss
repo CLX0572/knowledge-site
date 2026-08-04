@@ -241,15 +241,9 @@ article .chapter-nav {
 .katex-display {
   margin: 1.2rem 0 !important;
 }
-
-/* 隐藏 Explorer 标题栏 */
-.explorer .title {
-  display: none;
-}
-.explorer {
-  margin-top: 0;
-}
+/* ====== Explorer: 隐藏标题文字+箭头, 强制展开文件树 ====== */
+.explorer .title-button.desktop-explorer h2 { display: none; }
+.explorer .title-button.desktop-explorer .fold { display: none; }
+.explorer-content { display: block !important; }
 /* 隐藏 TOC 和 Backlinks */
-.toc, .backlinks {
-  display: none !important;
-}
+.toc, .backlinks { display: none !important; }

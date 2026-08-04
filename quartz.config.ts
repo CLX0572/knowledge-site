@@ -13,7 +13,7 @@ const config: QuartzConfig = {
     enableSPA: true,
     enablePopovers: true,
     locale: "zh-CN",
-    baseUrl: process.env.SITE_BASE_URL || "knowledgesite.vercel.app",
+    baseUrl: process.env.SITE_BASE_URL || "knowledge-site-aqn.pages.dev",
     ignorePatterns: ["private", "templates", ".obsidian", "物理讲义", "科目一-综合素质", "学习方法"],
     defaultDateType: "modified",
     theme: {
