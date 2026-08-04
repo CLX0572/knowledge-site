@@ -31,14 +31,11 @@ export const defaultContentPageLayout: PageLayout = {
         { Component: Component.Darkmode() },
       ],
     }),
-    Component.Explorer({
-      folderClickBehavior: "collapse",
-      folderDefaultState: "expanded",
-      useSavedState: false,
-      title: "",
-    }),
+    Component.Explorer(),
   ],
-  right: [],
+  right: [
+    Component.Graph(),
+  ],
 }
 
 export const defaultListPageLayout: PageLayout = {
@@ -51,12 +48,7 @@ export const defaultListPageLayout: PageLayout = {
         { Component: Component.Darkmode() },
       ],
     }),
-    Component.Explorer({
-      folderClickBehavior: "collapse",
-      folderDefaultState: "expanded",
-      useSavedState: false,
-      title: "",
-    }),
+    Component.Explorer(),
   ],
   right: [],
 }
