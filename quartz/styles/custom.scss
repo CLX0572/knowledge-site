@@ -241,3 +241,15 @@ article .chapter-nav {
 .katex-display {
   margin: 1.2rem 0 !important;
 }
+
+/* 隐藏 Explorer 标题栏 */
+.explorer .title {
+  display: none;
+}
+.explorer {
+  margin-top: 0;
+}
+/* 隐藏 TOC 和 Backlinks */
+.toc, .backlinks {
+  display: none !important;
+}
