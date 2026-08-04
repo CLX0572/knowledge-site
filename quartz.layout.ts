@@ -25,32 +25,26 @@ export const defaultContentPageLayout: PageLayout = {
   ],
   left: [
     Component.PageTitle(),
-    Component.MobileOnly(Component.Spacer()),
     Component.Flex({
       components: [
         { Component: Component.Search(), grow: true },
         { Component: Component.Darkmode() },
-        { Component: Component.ReaderMode() },
       ],
     }),
     Component.Explorer({
       folderClickBehavior: "collapse",
       folderDefaultState: "expanded",
       useSavedState: false,
+      title: "",
     }),
-    Component.DesktopOnly(Component.TableOfContents()),
-    Component.Backlinks(),
   ],
-  right: [
-    Component.Graph(),
-  ],
+  right: [],
 }
 
 export const defaultListPageLayout: PageLayout = {
   beforeBody: [Component.Breadcrumbs(), Component.ArticleTitle(), Component.ContentMeta()],
   left: [
     Component.PageTitle(),
-    Component.MobileOnly(Component.Spacer()),
     Component.Flex({
       components: [
         { Component: Component.Search(), grow: true },
@@ -61,6 +55,7 @@ export const defaultListPageLayout: PageLayout = {
       folderClickBehavior: "collapse",
       folderDefaultState: "expanded",
       useSavedState: false,
+      title: "",
     }),
   ],
   right: [],
