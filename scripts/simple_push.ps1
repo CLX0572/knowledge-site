@@ -1,4 +1,4 @@
-﻿#Requires -Version 5.1
+#Requires -Version 5.1
 # Simple GitHub push script (PS5 compatible - avoids finally/trap redirection bugs)
 # Hardcoded project root. Flow:
 #   cd root -> resolve system npm/node ABSOLUTE paths -> sync vault md -> status ->
@@ -200,6 +200,7 @@ function Run-WithTimeout {
 
 # Obsidian VAULT -> website content/ mirror sync via robocopy.
 function Sync-VaultToContent() {
+  [string]$ONLY_TOP_DIR_NAME = "轨向的物理笔记"
   if ([string]::IsNullOrWhiteSpace($VAULT) -or -not (Test-Path -LiteralPath $VAULT)) {
     Write-WARN ("Obsidian VAULT not found: " + $VAULT + "  -> skip md sync")
     return
@@ -208,20 +209,33 @@ function Sync-VaultToContent() {
   if (-not (Test-Path -LiteralPath $content)) {
     New-Item -ItemType Directory -Path $content -Force | Out-Null
   }
-  [string[]]$robArgs = @($VAULT, $content, "*.md", "/E", "/COPY:DAT", "/DCOPY:DAT", "/R:1", "/W:1", "/NP", "/NFL", "/NDL")
+  $srcDir = Join-Path $VAULT $ONLY_TOP_DIR_NAME
+  if (-not (Test-Path -LiteralPath $srcDir)) {
+    Write-WARN ("VAULT source dir not found: " + $srcDir + " -> skipping single-dir sync")
+    return
+  }
+  $dstDir = Join-Path $content $ONLY_TOP_DIR_NAME
+  if (-not (Test-Path -LiteralPath $dstDir)) {
+    New-Item -ItemType Directory -Path $dstDir -Force | Out-Null
+  }
+  [string[]]$robArgs = @($srcDir, $dstDir, "*.md", "/E", "/COPY:DAT", "/DCOPY:DAT", "/R:1", "/W:1", "/NP", "/NFL", "/NDL", "/PURGE")
   foreach ($exclude in @(".git", ".obsidian", ".trash", "_website", "_site")) {
     $robArgs += @("/XD", $exclude)
   }
-  foreach ($ext in @("*.png","*.jpg","*.jpeg","*.gif","*.svg","*.webp","*.pdf")) {
+  foreach ($ext in @("*.png","*.jpg","*.jpeg",".gif","*.svg","*.webp","*.pdf")) {
     $robArgs += $ext
   }
-  Write-Host "  robocopy Obsidian VAULT -> site content/  (md + attachments)"
+  Write-Host ("  robocopy Obsidian VAULT/'" + $ONLY_TOP_DIR_NAME + "' -> site content/'" + $ONLY_TOP_DIR_NAME + "' (only this single dir; /PURGE removes stale)")
   $null = & robocopy @robArgs
-  # robocopy exit 0..7 = OK; >=8 = real error
   if ($LASTEXITCODE -ge 8) {
     Write-WARN ("robocopy reported warning (exit={0}); continuing anyway..." -f $LASTEXITCODE)
   } else {
-    Write-OK "md + resource sync done"
+    Write-OK "single-dir md + resource sync done"
+  }
+  # Also copy landing index alias
+  $subHome = Join-Path $dstDir "待处理\index.md"
+  if (Test-Path -LiteralPath $subHome) {
+    Copy-Item -LiteralPath $subHome -Destination (Join-Path $content "index.md") -Force
   }
 }
 
@@ -249,6 +263,7 @@ if ($SkipVaultSync) {
 } else {
   Write-H2 "Step 0.5: Sync Obsidian Vault md -> content/"
   Sync-VaultToContent
+    Clean-StaleContent
 }
 
 # ---------- Step 1: git status summary ----------

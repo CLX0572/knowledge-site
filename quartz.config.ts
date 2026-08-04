@@ -1,4 +1,4 @@
-﻿import { QuartzConfig } from "./quartz/cfg"
+import { QuartzConfig } from "./quartz/cfg"
 import * as Plugin from "./quartz/plugins"
 
 /**
@@ -8,13 +8,13 @@ import * as Plugin from "./quartz/plugins"
  */
 const config: QuartzConfig = {
   configuration: {
-    pageTitle: "知识清单",
-    pageTitleSuffix: "",
+    pageTitle: "轨向的物理笔记",
+    pageTitleSuffix: " | 轨向的物理笔记",
     enableSPA: true,
     enablePopovers: true,
     locale: "zh-CN",
     baseUrl: process.env.SITE_BASE_URL || "knowledgesite.vercel.app",
-    ignorePatterns: ["private", "templates", ".obsidian", "物理讲义"],
+    ignorePatterns: ["private", "templates", ".obsidian", "物理讲义", "科目一-综合素质", "学习方法"],
     defaultDateType: "modified",
     theme: {
       fontOrigin: "local",
@@ -49,8 +49,6 @@ const config: QuartzConfig = {
         },
       },
     },
-    generatedFontFiles: ["contentIndex", "static"],
-    assets: "quartz/static",
     globalState: {},
   },
   plugins: {
@@ -91,9 +89,6 @@ const config: QuartzConfig = {
       Plugin.Assets(),
       Plugin.Static(),
       Plugin.NotFoundPage(),
-      Plugin.CNAME({
-        domain: process.env.CNAME_DOMAIN || "",
-      }),
     ],
   },
 }
