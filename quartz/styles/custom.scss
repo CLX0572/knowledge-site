@@ -241,9 +241,10 @@ article .chapter-nav {
 .katex-display {
   margin: 1.2rem 0 !important;
 }
-/* ====== Explorer: 隐藏标题文字+箭头, 强制展开文件树 ====== */
-.explorer .title-button.desktop-explorer h2 { display: none; }
-.explorer .title-button.desktop-explorer .fold { display: none; }
+/* ====== Explorer: 完全隐藏标题按钮, 强制展开文件树 ====== */
+.explorer .title-button.desktop-explorer { display: none !important; }
+.explorer .title-button.mobile-explorer { display: none !important; }
+.explorer details > summary { display: none !important; }
 .explorer-content { display: block !important; }
 /* 隐藏 TOC 和 Backlinks */
 .toc, .backlinks { display: none !important; }
